@@ -16,7 +16,7 @@ Someinternalhost с LAN интерфейсом).
 
 **проверка работоспособности:**
 ---
-необходимо перейти по ссылке: [https://34.76.16.142.sslip.io/] ()
+необходимо перейти по ссылке: https://34.76.16.142.sslip.io/
 
 **данные для подключения:**
 --- 
@@ -59,3 +59,59 @@ someinternalhost_IP = 10.132.0.8
 	appuser@someinternalhost:~$
 	appuser@someinternalhost:~$
 
+
+
+
+# HomeWork 3 (Cloud Bastion)
+---
+
+**В рамках задания было сделано:**
+---
+1. Установлен и настроен gcloud.
+2. Создана VM с помощью gcloud.
+3. На VM установлены ruby, MongoDB и развернуто тестовое приложение.
+4. Команды по настройке системы и деплою приложения завернуты в bash скрипты.
+5. Отработана установка и настройка VM с помощью startup-script.
+6. Создан bucket для хранения startup-script.sh.
+7. Открыт порт в фаерволе GCP с помощью gcloud.
+
+**данные для подключения:**
+--- 
+testapp_IP = 35.210.224.4
+
+testapp_port = 9292
+
+**проверка работоспособности:**
+---
+необходимо перейти по ссылке: http://35.210.224.4:9292
+
+**команда для создания VM с настройкой системы и деплоем приложения с помощью startup-script размещенного локально:**
+---
+	gcloud compute instances create reddit-app\
+  		--boot-disk-size=10GB \
+  		--image-family ubuntu-1604-lts \
+  		--image-project=ubuntu-os-cloud \
+  		--machine-type=g1-small \
+  		--tags puma-server \
+  		--restart-on-failure \
+  		--metadata-from-file startup-script=startup-script.sh
+
+**команда для создания VM с настройкой системы и деплоем приложения с помощью startup-script-url:**
+---
+	gcloud compute instances create reddit-app\
+  		--boot-disk-size=10GB \
+  		--image-family ubuntu-1604-lts \
+  		--image-project=ubuntu-os-cloud \
+  		--machine-type=g1-small \
+  		--tags puma-server \
+  		--restart-on-failure \
+  		--metadata startup-script-url=https://storage.googleapis.com/otus-reddit-app/startup-script.sh
+
+**команда для создания правила фаервола с помощью gcloud:**
+---
+	gcloud compute firewall-rules create default-puma-server \
+    	--action allow \
+    	--direction ingress \
+    	--rules tcp:9292 \
+    	--source-ranges 0.0.0.0/0 \
+    	--target-tags puma-server
