@@ -117,7 +117,7 @@ testapp_port = 9292
     	--target-tags puma-server
 
 
-# HomeWork 5 (Packer base)
+# HomeWork 5 (Packer-base)
 ---
 
 **В рамках задания было сделано:**
