@@ -62,7 +62,7 @@ someinternalhost_IP = 10.132.0.8
 
 
 
-# HomeWork 3 (Cloud Bastion)
+# HomeWork 4 (Cloud-testapp)
 ---
 
 **В рамках задания было сделано:**
@@ -115,3 +115,23 @@ testapp_port = 9292
     	--rules tcp:9292 \
     	--source-ranges 0.0.0.0/0 \
     	--target-tags puma-server
+
+
+# HomeWork 5 (Packer-base)
+---
+
+**В рамках задания было сделано:**
+---
+
+1. Установлен packer, выдан доступ для packer в GCP.
+2. По инструкции создан образ ubuntu c установленными mongodb и ruby. Из образа развернута VM и в нее задеплоено приложение.
+3. Добавлен шаблон с переменными, файл variables.json. ID проекта, семейство образов, тип VM, описание образа, размер и тип диска, тэг сети.
+4. Создан образ reddit-full, с установленными mongodb и ruby, задеплоенным приложением. Для старта приложения написан systemd unit.
+5. Написан скрипт для запуска VM из командной строки с помощью утилиты gcloud файл config-scripts/create-reddit-vm.sh.
+
+**проверка работоспособности:**
+---
+1. В корне репозитория выполнить команду: packer build -var-file variables.json immutable.json
+2. Выполнить скрипт config-scripts/create-reddit-vm.sh.
+3. Запомнить IP адрес. 
+4. В браузере открыть http://IP:9292.
