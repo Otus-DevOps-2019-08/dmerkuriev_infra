@@ -135,3 +135,190 @@ testapp_port = 9292
 2. Выполнить скрипт config-scripts/create-reddit-vm.sh.
 3. Запомнить IP адрес. 
 4. В браузере открыть http://IP:9292.
+
+# HomeWork 6 (Terraform-1)
+---
+
+**В рамках задания было сделано:**
+---
+1. Удалили ключи пользователя appuser, для того что бы настроить добавление ключей с помощью terraform.
+2. Установили terraform.
+3. Создали конфигурационный файл **main.tf** - декларативное описание инфраструктуры. Описали в нем провайдера (GCP) и описали ресурсы для создания VM.
+4. Создали VM из образа reddit-base. Посмотрели tfstate, c помощью grep получили из него IP-адрес VM.
+5. Создали файл **outputs.tf** в котором описали выходную переменную "app\_external_ip", которая возвращает в консоль IP адрес VM после ее создания.
+6. Добавили ресурс с правилом фаерволла для нашего приложения.
+7. Добавили provisioners: deploy.sh скрипт деплоя приложения, puma.service systemd unit для сервера puma.
+8. Прописали параметры подключения provisioners.
+9. С помощью команды taint пересоздали VM. 
+10. Проверили работу приложения открыв в браузере.
+11. Создали файл **variables.tf** в котором определили входные переменные.
+12. Определили с помощью переменных параметры ресурсов в main.tf.
+13. Определили переменные в файле **terraform.tfvars**.
+14. Удалили и заново создали ресурсы. Проверили работоспособность.
+
+**Самостоятельная работа**
+---
+* Определите input переменную для приватного ключа,
+использующегося в определении подключения для
+провижинеров (connection).
+
+В variables.tf добавляем строки:
+
+	variable private_key_path {
+	  description = "Path to the private key used for ssh access"
+	}
+	
+В terraform.tfvars добавляем строки:
+
+	private_key_path = "~/.ssh/appuser"
+	
+В main.tf добавляем строки:
+
+	connection {
+	  type  = "ssh"
+      host  = self.network_interface[0].access_config[0].nat_ip
+      user  = "appuser"
+      agent = false
+      # путь до приватного ключа
+      private_key = file(var.private_key_path)
+    }
+
+* Определите input переменную для задания зоны в ресурсе
+"google\_compute_instance" "app". У нее должно быть значение
+по умолчанию;
+
+В variables.tf добавляем строки:
+
+	variable zone {
+  	  description = "Zone"
+  	  default     = "europe-west1-d"
+	}
+В main.tf добавляем строки:
+
+	resource "google_compute_instance" "app" {
+	...
+	  zone         = var.zone	
+	...  
+	}
+* Отформатируйте все конфигурационные файлы используя
+команду terraform fmt;
+
+Конфигурационные файлы отформатированы.
+
+* Так как в репозиторий не попадет ваш terraform.tfvars, то
+нужно сделать рядом файл terraform.tfvars.example, в
+котором будут указаны переменные для образца.
+
+Создан файл terraform.tfvars.example со следующим содержанием:
+
+	project          = "Project ID"
+	public_key_path  = "~/.ssh/appuser.pub"
+	private_key_path = "~/.ssh/appuser"
+	disk_image       = "Image"
+
+**Задание со***
+---
+* Опишите в коде терраформа добавление ssh ключа пользователя
+appuser1 в метаданные проекта. Выполните terraform apply и
+проверьте результат (публичный ключ можно брать пользователя
+appuser).
+
+В main.tf прописано:
+
+	metadata = {
+	# путь до публичного ключа
+	  ssh-keys = "appuser1:${file(var.public_key_path)}"
+	}
+После применения terraform apply ключ пользователя appuser1 появился в VM и появилась возможность зайти под ним по ssh на VM.
+
+* Опишите в коде терраформа добавление ssh ключей нескольких
+пользователей в метаданные проекта (можно просто один и тот
+же публичный ключ, но с разными именами пользователей,
+например appuser1, appuser2 и т.д.). Выполните terraform apply и проверьте результат.
+
+В main.tf прописано:
+
+	metadata = {
+	# путь до публичного ключа
+	  ssh-keys = "appuser:${file(var.public_key_path)} appuser1:${file(var.public_key_path)} appuser2:${file(var.public_key_path)}"
+	}
+После применения terraform apply ключи пользователей appuser, appuser1, appuser2 появились в VM и появилась возможность зайти под ними по ssh на VM.
+
+* Добавьте в веб интерфейсе ssh ключ пользователю appuser_web
+в метаданные проекта. Выполните terraform apply и проверьте
+результат.
+
+Добалвен ключ пользователя appuser-web в веб-интерфейс, в метаданные проекта. После применения tarraform apply ключ был удален.
+
+* Какие проблемы вы обнаружили?
+
+Ключ пользователя appuser_web был удален terraform, так как мы его добавили через веб-интерфейс и информации о нем не было в конфигурационных файлах и tfstate.
+
+**Задание со****
+---
+* Создайте файл lb.tf и опишите в нем в коде terraform создание HTTP балансировщика, направляющего трафик на наше
+развернутое приложение на инстансе reddit-app. Проверьте
+доступность приложения по адресу балансировщика. Добавьте в
+output переменные адрес балансировщика.
+
+Создан файл lb.tf с конфигурацией балансировщика:
+
+	resource "google_compute_forwarding_rule" "lb-fw" {
+	  name                  = "reddit-app"
+	  description           = "Forwarding rule for Reddit apps"
+	  port_range            = "9292"
+	  target                = "${google_compute_target_pool.lb.self_link}"
+	  load_balancing_scheme = "EXTERNAL"
+	}
+	
+	resource "google_compute_target_pool" "lb" {
+	  name          = "reddit-lb"
+	  description   = "Load balancer for Reddit apps"
+	  instances     = "${google_compute_instance.app.*.self_link}"
+	  health_checks = ["${google_compute_http_health_check.default.name}"]
+	}
+	
+	resource "google_compute_http_health_check" "default" {
+	  name                = "reddit-app-hc"
+	  port                = 9292
+	  check_interval_sec  = 5
+	  timeout_sec         = 5
+	  healthy_threshold   = 2
+	  unhealthy_threshold = 5
+	} 
+В outputs.tf добавлена переменная, возвращающая IP адрес балансировщика:
+
+	output "lb_external_ip" {
+	  value = google_compute_forwarding_rule.lb-fw.ip_address
+	}
+
+* Добавьте в код еще один terraform ресурс для нового инстанса
+приложения, например reddit-app2, добавьте его в балансировщик и проверьте, что при остановке на одном из инстансов приложения (например systemctl stop puma), приложение продолжает быть доступным по адресу балансировщика; Добавьте в output переменные адрес второго инстанса; Какие проблемы вы видите в такой конфигурации приложения? 
+* Как мы видим, подход с созданием доп. инстанса копированием
+кода выглядит нерационально, т.к. копируется много кода.
+Удалите описание reddit-app2 и попробуйте подход с заданием
+количества инстансов через параметр ресурса count.
+Переменная count должна задаваться в параметрах и по
+умолчанию равна 1.
+
+В variables.tf добавлена переменная:
+
+	variable instance_count {
+	  description = "Number of instances"
+	  default     = "1"
+	}
+
+В main.tf описаны параметры создания VM.
+
+	resource "google_compute_instance" "app" {
+	  count        = "${var.instance_count}"
+	  name         = "reddit-app-${count.index}"
+	...
+	}
+	
+В outputs.tf скорректированна переменная возвращающая IP адреса всех созданных VM.
+
+	output "app_external_ip" {
+  	  value = google_compute_instance.app[*].network_interface[0].access_config[0].nat_ip
+	}
+После применения terraform apply, были созданы балансировщик и 2 VM. Проверена доступность приложения на IP адресе балансировщика. Приложение оставалось доступным после выключения сервера puma на одной из VM.
