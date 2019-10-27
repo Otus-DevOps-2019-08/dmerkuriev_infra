@@ -14,7 +14,8 @@ provider "google" {
 
 resource "google_compute_project_metadata_item" "ssh-keys" {
   key   = "ssh-keys"
-  value = "appuser:${file(var.public_key_path)} appuser1:${file(var.public_key_path)} appuser2:${file(var.public_key_path)}"
+  #value = "appuser:${file(var.public_key_path)} appuser1:${file(var.public_key_path)} appuser2:${file(var.public_key_path)}"
+  value = "appuser:${file(var.public_key_path)}"
 }
 
 resource "google_compute_instance" "app" {
@@ -34,10 +35,10 @@ resource "google_compute_instance" "app" {
     access_config {}
   }
 
-  metadata = {
-    # путь до публичного ключа
-    ssh-keys = "appuser:${file(var.public_key_path)}"
-  }
+  #metadata = {
+  #  # путь до публичного ключа
+  #  ssh-keys = "appuser:${file(var.public_key_path)}"
+  #}
 
   connection {
     type  = "ssh"
@@ -71,5 +72,21 @@ resource "google_compute_firewall" "firewall_puma" {
   source_ranges = ["0.0.0.0/0"]
   # Правило применимо для инстансов с перечисленными тэгами
   target_tags = ["reddit-app"]
+}
+
+resource "google_compute_firewall" "firewall_ssh" {
+  name = "default-allow-ssh"
+  network = "default"
+  description = "allow ssh for all"
+  allow {
+    protocol = "tcp"
+    ports = ["22"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+}
+
+resource "google_compute_address" "app_ip" {
+  name = "reddit-app-ip"
 }
 
