@@ -216,7 +216,7 @@ testapp_port = 9292
 	private_key_path = "~/.ssh/appuser"
 	disk_image       = "Image"
 
-**Задание со***
+**Задание с** *
 ---
 * Опишите в коде терраформа добавление ssh ключа пользователя
 appuser1 в метаданные проекта. Выполните terraform apply и
@@ -254,7 +254,7 @@ appuser).
 
 Ключ пользователя appuser_web был удален terraform, так как мы его добавили через веб-интерфейс и информации о нем не было в конфигурационных файлах и tfstate.
 
-**Задание со****
+**Задание с** **
 ---
 * Создайте файл lb.tf и опишите в нем в коде terraform создание HTTP балансировщика, направляющего трафик на наше
 развернутое приложение на инстансе reddit-app. Проверьте
@@ -322,3 +322,217 @@ output переменные адрес балансировщика.
   	  value = google_compute_instance.app[*].network_interface[0].access_config[0].nat_ip
 	}
 После применения terraform apply, были созданы балансировщик и 2 VM. Проверена доступность приложения на IP адресе балансировщика. Приложение оставалось доступным после выключения сервера puma на одной из VM.
+
+# HomeWork 7 (Terraform-2)
+---
+
+**В рамках задания было сделано:**
+---
+1. В репозитории создана новая ветка terraform-2.
+2. Количество инстансов из прошлого задания установлено равным 1. Файл **lb.tf** перенесен в **terraform/files**.
+3. В **main.tf** создан ресурс **"google_compute\_firewall" "firewall-ssh"** управляющий правилом файерволом для подключения по ssh.
+
+		resource "google_compute_firewall" "firewall_ssh" {
+	  	  name = "default-allow-ssh"
+	  	  network = "default"
+		
+	  	  allow {
+	       protocol = "tcp"
+	       ports = ["22"]
+	  	  }
+	  
+	  	  source_ranges = ["0.0.0.0/0"]
+		}
+4. В state файл импортирована информация о ресурсе **"google_compute\_firewall" "firewall-ssh"**.
+
+		$ terraform import google_compute_firewall.firewall_ssh default-allow-ssh
+5. В **main.tf** определен ресурс **"google_compute\_address"** в котором задан IP адрес для инстанса с приложением.
+
+		resource "google_compute_address" "app_ip" {
+		  name = "reddit-app-ip"
+		}
+В описании конфигурации VM добавлена ссылка на атрибут ресурса, который создает этот IP.
+
+		network_interface {
+		  network = "default"
+		  access_config {
+		    nat_ip = google_compute_address.app_ip.address
+		  }
+		} 
+
+6. В директории **packer** созданы два новых шаблона: **db.json** - собирается образ VM, содержащий установленную MongoDB, **app.json** - собирается образ VM, содержащий установленный Ruby.
+7. Конфиг **main.tf** разбит на два новых конфига: **app.tf** - вынесена конфигурация VM с приложением, **db.tf** - вынесена конфигурация базы.
+8. В файл **vpc.tf** вынесено правило фаервола для доступа по ssh, которое применимо для всех инстансов.
+9. Конфигурация разбита на модули. Созданы каталоги **modules/db**, **modules/app**.
+В файл **main.tf**, где определен провайдер вставлены секции вызова созданных нами модулей:
+
+		...
+		module "app" {
+		  source = "modules/app"
+		  public_key_path = var.public_key_path
+		  zone = var.zone
+		  app_disk_image = var.app_disk_image
+		}
+		
+		module "db" {
+		  source = "modules/db"
+		  public_key_path = var.public_key_path
+		  zone = var.zone
+		  db_disk_image = var.db_disk_image
+		}
+Для начала использования module их нужно загрузить командой **terraform get**.
+
+
+10. Создан модуль **module/vpc** с описанием конфигурации фаервола. modules/vpc/main.tf:
+		
+		resource "google_compute_firewall" "firewall_ssh" {
+  		  name    = "default-allow-ssh"
+  		  network = "default"
+
+  		  allow {
+    	    protocol = "tcp"
+    	    ports    = ["22"]
+  		  }
+
+  		  source_ranges = var.source_ranges
+		}
+
+
+11. Для переиспользования модулей, в каталоге **terraform** созданы два каталога **stage** и **prod**.
+С помощью модуля **vpc**, в окружении **stage** открыт ssh доступ с любого ip адреса:
+
+		module "vpc" {
+  		  source          = "../modules/vpc"
+  		  source_ranges   = ["0.0.0.0/0"]
+		}
+С помощью модуля **vpc**, в окружении **prod** открыт ssh доступ только с частного ip адреса:
+
+		module "vpc" {
+  		  source          = "../modules/vpc"
+  		  source_ranges   = ["8.8.8.8/32"]
+		}
+
+12. С помощью модуля **storage-bucket**, в каталоге terraform создан файл **storage-bucket.tf** c описанием создания бакета в сервисе Storage.
+
+		provider "google" {
+  		  version = "~> 2.15"
+  		  project = var.project
+  		  region  = var.region
+		}
+
+		module "storage-bucket" {
+  		  source  = "SweetOps/storage-bucket/google"
+  		  version = "0.3.0"
+
+  		  name = "storage-bucket-terraform-test-dm"
+  		  location = var.region
+		}
+
+		output storage-bucket_url {
+  		  value = module.storage-bucket.url
+		}
+
+
+**Задание с** *
+---
+* Настройте хранение стейт файла в удаленном бекенде (remote backends) для окружений stage и prod, используя Google Cloud Storage в качестве бекенда. Описание бекенда нужно вынести в отдельный файл backend.tf
+
+В каталогах **prod** и **stage** созданы файлы **backend.tf** следующего содержания:
+
+prod/backend.tf
+
+	terraform {
+  	  backend "gcs" {
+  	    bucket = "storage-bucket-terraform-test-dm"
+  	    prefix = "terraform/prod"
+  	  }
+	}
+
+stage/backend.tf
+
+	terraform {
+	  backend "gcs" {
+	    bucket = "storage-bucket-terraform-test-dm"
+	    prefix = "terraform/stage"
+	  }
+	}
+
+Удален state файл. 
+
+Проверено, что после инициализации terraform в окружении stage и prod, state берерться из созданного бакета. Одновременное изменение конфигурации не работает, так как state-файл заблокирован во избежании перезаписи несколькими пользователями в один момент времени.
+
+**Задание с** **
+---
+* В процессе перехода от конфигурации, созданной в
+предыдущем ДЗ к модулям мы перестали использовать provisioner
+для деплоя приложения. Соответственно, инстансы поднимаются
+без приложения.
+* Добавьте необходимые provisioner в модули для деплоя и работы
+приложения. Файлы, используемые в provisioner, должны
+находится в директории модуля.
+
+В модуль **DB** в **db/main.tf** добавлен блок **connection**, в котором описано подключение по ssh. Добавлен **provisioner** который меняет конфиг mongod, что бы тот слушал не только localhost и перезапускает mongod.
+
+	...
+	connection {
+	  type        = "ssh"
+	  user        = "appuser"
+	  agent       = false
+	  private_key = file(var.private_key_path)
+	  host = self.network_interface[0].access_config[0].nat_ip
+  	}
+  
+	provisioner "remote-exec" {
+    inline = [
+      "sudo sed -i 's/bindIp: 127.0.0.1/bindIp: 0.0.0.0/' /etc/mongod.conf",
+      "sudo systemctl restart mongod"
+    ]
+    }
+В **db/outputs.tf** добавлена переменная **mongod_ip** указывающая на внутренний IP адрес VM с mongod.
+	
+	...
+	output "mongod_ip" {
+	  value = google_compute_instance.db.network\_interface.0.network\_ip
+	}
+
+В модуль **APP** в **app/main.tf** добавлен блок **connection**, в котором описано подключение по ssh. Добавлены **provisioners** которые: экспортируют переменную **DATABASE_URL** в переменные окружающей среды, копируют **puma.service** файл, запускают деплой приложения с помощью скрипта **deploy.sh**.
+
+	...
+	connection {
+	  type        = "ssh"
+	  host        = google_compute_address.app_ip.address
+	  user        = "appuser"
+	  agent       = false
+	  private_key = file(var.private_key_path)
+	}
+	
+	provisioner "remote-exec" {
+	  inline = ["echo export DATABASE_URL=\"${var.mongod_ip}\" >> ~/.profile"]
+	}
+	
+	provisioner "file" {
+	  source      = "${path.module}/files/puma.service"
+	  destination = "/tmp/puma.service"
+	}
+	
+	provisioner "remote-exec" {
+	  script = "${path.module}/files/deploy.sh"
+	}
+
+
+
+Проведена проверка работы приложения и БД.
+	
+	terraform apply
+	...
+	...
+	Apply complete! Resources: 6 added, 0 changed, 0 destroyed.
+
+	Outputs:
+
+	app_external_ip = [
+  	  "35.210.40.235",
+	]
+	mongod_ip = 10.132.15.197
+	
+После чего можно проверить работоспособность приложения открыв в браузере адрес **http://35.210.40.235:9292**
