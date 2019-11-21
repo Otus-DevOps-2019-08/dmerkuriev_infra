@@ -536,3 +536,125 @@ stage/backend.tf
 	mongod_ip = 10.132.15.197
 	
 После чего можно проверить работоспособность приложения открыв в браузере адрес **http://35.210.40.235:9292**
+
+# HomeWork 8 (Ansible-1)
+---
+
+**В рамках задания было сделано:**
+---
+1. Установлен ansible 2.8.1.
+2. С помощью terraform поднята инфраструктура из прошлого задания.
+3. Создан конфиг ansible.cfg:
+
+		[defaults]
+		inventory = ./inventory
+		remote_user = appuser
+		private_key_file = ~/.ssh/appuser
+		host_key_checking = False
+		retry_files_enabled = False
+4. Создан файл inventory, в котором описаны две группы хостов app, db и два хоста в них appserver и dbserver:
+
+		[app]
+		appserver ansible_host=35.210.40.235
+
+		[db]
+		dbserver ansible_host=35.210.8.128
+
+5. Проведена проверка работы ansible.
+
+		$ ansible db -m command -a uptime
+		dbserver | CHANGED | rc=0 >>
+ 		12:22:03 up 2 days, 23:21,  1 user,  load average: 0.00, 0.00, 0.00
+
+		$ ansible app -m command -a uptime
+		appserver | CHANGED | rc=0 >>
+ 		12:22:12 up 2 days, 23:20,  1 user,  load average: 0.00, 0.01, 0.00
+
+6. Инвентори файл переписан в формат YAML inventory.yml:
+
+		app:
+  		  hosts:
+    	    appserver:
+      	      ansible_host: 35.210.40.235
+
+		db:
+  		  hosts:
+    	    dbserver:
+      	      ansible_host: 35.210.8.128
+
+7. Проведена проверка работы inventory.yml
+
+		$ ansible all -m ping -i inventory.yml
+		dbserver | SUCCESS => {
+			"changed": false,
+			"ping": "pong"
+		}
+		appserver | SUCCESS => {
+			"changed": false,
+			"ping": "pong"
+		}
+
+8. Проведена проверка статуса mongod, с помощью модулей shell, command, systemd, service на хостах в группе db.
+
+		$ ansible db -m shell -a 'systemctl status mongod'
+		dbserver | CHANGED | rc=0 >>
+		● mongod.service - High-performance, schema-free document-oriented database
+   			Loaded: loaded (/lib/systemd/system/mongod.service; enabled; vendor preset: enabled)
+   			Active: active (running) since Mon 2019-11-18 13:01:16 UTC; 2 days ago
+
+		$ ansible db -m command -a 'systemctl status mongod'
+		dbserver | CHANGED | rc=0 >>
+		● mongod.service - High-performance, schema-free document-oriented database
+   			Loaded: loaded (/lib/systemd/system/mongod.service; enabled; vendor preset: enabled)
+   			Active: active (running) since Mon 2019-11-18 13:01:16 UTC; 2 days ago
+    
+		$ ansible db -m systemd -a name=mongod
+		dbserver | SUCCESS => {
+    		"changed": false,
+    		"name": "mongod",
+    		"status": {
+        		"ActiveState": "active",
+        		...
+    		}
+		}
+
+		$ ansible db -m service -a name=mongod
+		dbserver | SUCCESS => {
+    		"changed": false,
+    		"name": "mongod",
+    		"status": {
+        		"ActiveState": "active",
+    		}
+		}
+
+ модуль **command** выполняет команды, не используя оболочку (sh, bash), поэтому в нем не работают перенаправления потоков и нет доступа к некоторым переменным окружения.
+
+ модуль **systemd** предназначен для управления systemd юнитами.
+
+ модуль **service** предназначен для управления сервисами, более универсален и будет работать и в более старых ОС с init.d.
+
+ На примере с проверкой состояния сервиса можно увидеть преимущества использования модуля вместо запуска shell-команд.
+Модуль возвращает в качестве ответа набор переменных, которые можно легко использовать для проверки в дальнейшем коде.
+Например **status.ActiveState** содержит состояние сервиса. А для shell-команд нужно будет реализовывать проверку с помощью регулярных выражений, кодов возврата и других сложных и ненадежных решений.
+
+9. Написан простой playbook clone.yml:
+
+		---
+		- name: Clone
+  		hosts: app
+  		tasks:
+    	  - name: Clone repo
+      		 git:
+        		repo: https://github.com/express42/reddit.git
+        		dest: /home/appuser/reddit
+
+10. При выполнении **ansible-playbook clone.yml** получен следующи результат:
+
+		PLAY RECAP **********************************************************************************************************************************
+		appserver                  : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
+	После удаления репозитория командой **ansible app -m command -a 'rm -rf ~/reddit'** еще раз запущена роль **ansible-playbook clone.yml** и результат уже другой (репозиторий был скопирован и ansible показал, что были произведены изменения **changed=1**).
+	
+		PLAY RECAP **********************************************************************************************************************************
+		appserver                  : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
+
