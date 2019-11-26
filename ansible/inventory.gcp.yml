@@ -1,15 +1,22 @@
+---
 plugin: gcp_compute
+# проект gcp
 projects:
   - infra-253232
+# регион по которому идет поиск
 regions:
-  - europe-west1-d 
+  - europe-west1-d
+# описание группировки хостов по названию
 groups:
   db: "'-db' in name"
   app: "'-app' in name"
 auth_kind: serviceaccount
+# путь для ключа
 service_account_file: /Users/dm/otus/devops/dmerkuriev_infra/dynamic-inventory-account.json
 hostnames:
   - name
+# переменные hostvars
 compose:
+  # внешние IP адреса инстансов
   ansible_host: networkInterfaces[0].accessConfigs[0].natIP
 
