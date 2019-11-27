@@ -4,3 +4,6 @@ packer/variables.json
 *.tfstate.backup
 *.tfvars
 .terraform/
+*.retry
+dynamic-inventory-account.json
+

@@ -658,3 +658,117 @@ stage/backend.tf
 		PLAY RECAP **********************************************************************************************************************************
 		appserver                  : ok=2    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 
+# HomeWork 9 (Ansible-2)
+---
+
+**В рамках задания было сделано:**
+---
+1. Создан playbook **reddit_app_one_play.yml** с одним task внутри. 
+2. Отработан запуск таска с фильтрами по тегам **--tag** и фильтром хостов **--limit**.
+3. Playbook переписан в несколько таксов **reddit\_app\_multiple_plays.yml**. В каждый таск добавлены тэги. Фильтр хостов **--limit** можно больше не использовать.
+4. Playbook c тремя тасками разбит на три playbook: **app.yml**, **db.yml**, **deploy.yml**. С помощью директивы import_playbook эти три playbook включены в **site.yml**.
+5. Написаны плэйбуки **packer\_app.yml** и **packer\_db.yml**.
+6. В packer переписан provisioners с баш-скриптов на ansible playbook **packer\_app.yml** и **packer\_db.yml** в образах reddit\_app и reddit\_db.
+7. Образы packer пересобраны, с помощью terraform поднято окружение stage.
+8. C помощью playbook site.yml раскатано окружение, задеплоено приложение. 
+9. Работа приложения проверена через браузер.
+
+**Задание с** *
+---
+* Исследуйте возможности использования dynamic inventory для GCP (для этого есть не только gce.py). Нужно выбрать оптимальное, на ваш взгляд, решение. Решение добавить в PR к основному заданию.
+Использование динамического инвентори означает, что это должно быть отражено в ansible.cfg и плейбуках (т.е. они должны использовать выбранное решение).
+
+Для dynamic inventory был выбран модуль ansible **gcp_compute**.
+
+Установим необходимое ПО:
+
+	$ pip install google-auth requests
+
+Создаем сервисный аккуант для доступа к Compute Engine API:
+
+	gcloud iam service-accounts create dynamic-inventory-account --display-name='Ansible dynamic inventory account' 
+
+Эспортируем json ключ сервисного аккаунта:
+
+	gcloud iam service-accounts keys create dynamic-inventory-account.json --iam-account=dynamic-inventory-account@infra-000000.iam.gserviceaccount.com
+
+Правим роль для созданного аккаунта:
+
+	gcloud projects add-iam-policy-binding infra-000000 --member serviceAccount:dynamic-inventory-account@infra-000000.iam.gserviceaccount.com --role roles/viewer
+
+Пишем инвентари файл **inventory.gcp.yml**
+
+	---
+	# имя плагина
+	plugin: gcp_compute
+	# имя проекта gcp
+	projects:
+  	  - infra-000000
+	# регион по которому идет поиск
+	regions:
+	  - europe-west1-d
+	# описание группировки хостов по имени
+	groups:
+  	  db: "'-db' in name"
+  	  app: "'-app' in name"
+  	# аунтификация по средствам сервисного аккаунта
+	auth_kind: serviceaccount
+	# путь до ключа
+	service_account_file: ../dynamic-inventory-account.json
+	hostnames:
+  	  - name
+	compose:
+     ansible_host: networkInterfaces[0].accessConfigs[0].natIP
+	
+
+Прописываем наш динамический инвентори в конфиг **ansible.cfg**:
+
+	[defaults]
+	inventory = ./inventory.gcp.yml
+
+Проверяем результат:
+	
+	$ ansible-inventory --graph
+	@all:
+  	  |--@app:
+  	  |  |--reddit-app
+  	  |--@db:
+  	  |  |--reddit-db
+  	  |--@ungrouped:
+
+Все переменные hostvars доступны по команде 
+
+	$ ansible-inventory --list
+
+Пропишем переменную внутреннего IP адреса reddit-db инстанса в playbook **app.yml**
+
+	---
+	- name: Configure App
+  	  hosts: app
+  	  become: true
+  	  vars:
+       db_host: "{{ hostvars['reddit-db'].networkInterfaces[0].networkIP }}"
+	...
+
+Так же пропишем переменную внутреннего IP адреса reddit-db инстанса в playbook **db.yml** для конфига mongodb, так как плохая практика, что он у нас слушает 0.0.0.0
+
+	---
+	- name: Configure MongoDB
+  	  hosts: db
+  	  become: true
+  	  vars:
+ 	    mongo_bind_ip: "{{ hostvars['reddit-db'].networkInterfaces[0].networkIP }}"
+
+Запускает playbook site.yml и проверяем работу приложения.
+
+Использованные статьи:
+
+https://docs.ansible.com/ansible/latest/plugins/inventory/gcp_compute.html
+	
+https://cloud.google.com/iam/docs/creating-managing-service-account-keys
+
+https://cloud.google.com/iam/docs/granting-changing-revoking-access
+	
+https://medium.com/@Temikus/ansible-gcp-dynamic-inventory-2-0-7f3531b28434
+
+http://matthieure.me/2018/12/31/ansible_inventory_plugin.html
