@@ -1,0 +1,2 @@
+mongo_bind_ip: "{{ hostvars['reddit-db'].networkInterfaces[0].networkIP }}"
+
