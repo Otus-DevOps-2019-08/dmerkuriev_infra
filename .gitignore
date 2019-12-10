@@ -6,4 +6,5 @@ packer/variables.json
 .terraform/
 *.retry
 dynamic-inventory-account.json
+jdauphant.nginx
 
