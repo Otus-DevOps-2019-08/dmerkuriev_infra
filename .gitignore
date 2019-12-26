@@ -7,4 +7,11 @@ packer/variables.json
 *.retry
 dynamic-inventory-account.json
 jdauphant.nginx
+# Vagrant & molecule
+.vagrant/
+*.log
+*.pyc
+.molecule
+.cache
+.pytest_cache
 
