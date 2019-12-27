@@ -3,3 +3,6 @@
 - name: reload puma
   systemd: name=puma state=restarted
 
+- name: reload nginx
+  systemd: name=nginx state=restarted
+
